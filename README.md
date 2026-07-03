@@ -1,3 +1,38 @@
+## Fork 修改说明
+
+本 fork 为 Multiverse-Core 添加了 Folia/Canvas 兼容支持（版本 `5.7.1-folia`）。
+
+### 修改内容
+
+- **FoliaCompat 工具类**：运行时检测 Folia，并将调度路由到对应的 Scheduler。
+- **WorldUnloadCompat（世界卸载兼容）**：
+  - Canvas：反射调用 `unloadWorldAsync`（Canvas 专属 API，异步卸载）。
+  - Paper/Purpur：同步 `unloadWorld`。
+  - 上游 Folia：不支持（Folia 未实现世界卸载 API，功能禁用并输出警告）。
+- **WorldManager**：`createWorld` 路由到 `GlobalRegionScheduler`，`unloadWorld` 改用 `WorldUnloadCompat`。
+- **WorldConfigNodes**：`difficulty`/`pvp`/`weather` 等设置变更路由到 global region。
+- **调度器迁移**：迁移 6 个调度器文件到 Folia 兼容调度。
+- **readSpawnFromWorld**：Folia 下跳过 spawn 安全校验，避免启动死锁。
+- **plugin.yml**：`folia-supported: true`，版本 `5.7.1-folia`。
+
+### 兼容性（重要）
+
+| 服务端 | 兼容性 | 说明 |
+|--------|--------|------|
+| Canvas 26.2 | ✅ 完全兼容 | 世界创建/加载/卸载均可用（Canvas 实现了 `createWorld` 和 `unloadWorldAsync`） |
+| Paper/Purpur | ✅ 完全兼容 | 走同步 Bukkit API |
+| 上游 Folia | ⚠️ 部分兼容 | 世界创建/卸载不可用（上游 Folia 未实现 `createWorld`/`unloadWorld` API，会抛 `UnsupportedOperationException`）；其他功能如传送、命令、配置可用 |
+
+### 构建方式
+
+```bash
+./gradlew shadowJar
+```
+
+**Java 版本要求**：Java 21
+
+---
+
 <p align="center">
 <img src="config/multiverse-banner.png" alt="Multiverse Logo">
 </p>
