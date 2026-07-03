@@ -4,7 +4,6 @@ import com.dumptruckman.minecraft.util.Logging;
 import io.vavr.control.Option;
 import jakarta.inject.Inject;
 import org.bukkit.Server;
-import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
 import org.jvnet.hk2.annotations.Service;
 import org.mvplugins.multiverse.core.MultiverseCore;
@@ -48,12 +47,8 @@ public final class WorldTickDeferrer {
             return;
         }
         Logging.fine("Deferring world tick...");
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                action.run();
-            }
-        }.runTaskLater(this.plugin, 1L);
+        // 世界 tick 期间延迟: 路由到 global 线程(Folia/Canvas)或主线程(Paper). 1 tick 后执行.
+        com.folia.compat.FoliaCompat.runTaskLater(this.plugin, action, 1L);
     }
 
     /**

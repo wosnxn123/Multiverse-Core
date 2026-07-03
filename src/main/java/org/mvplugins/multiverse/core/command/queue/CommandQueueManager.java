@@ -20,7 +20,6 @@ import org.bukkit.command.BlockCommandSender;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 import org.jvnet.hk2.annotations.Service;
 
@@ -104,11 +103,12 @@ public class CommandQueueManager {
      * Expire task that removes a {@link CommandQueuePayload} from queue after valid duration defined.
      *
      * @param senderName    The name of the sender.
-     * @return The expire {@link BukkitTask}.
+     * @return The expire {@link com.folia.compat.FoliaCompat.TaskHandle}.
      */
     @NotNull
-    private BukkitTask runExpireLater(@NotNull String senderName, int validDuration) {
-        return Bukkit.getScheduler().runTaskLater(
+    private com.folia.compat.FoliaCompat.TaskHandle runExpireLater(@NotNull String senderName, int validDuration) {
+        // 命令队列过期回调: 执行命令/发消息, 路由到 global 线程(Folia)或主线程(Paper)
+        return com.folia.compat.FoliaCompat.runTaskLater(
                 this.plugin,
                 expireRunnable(senderName),
                 validDuration * TICKS_PER_SECOND);
@@ -166,7 +166,7 @@ public class CommandQueueManager {
             Logging.finer("No queue command to remove for sender %s.", senderName);
             return;
         }
-        Option.of(payload.expireTask()).peek(BukkitTask::cancel);
+        Option.of(payload.expireTask()).peek(com.folia.compat.FoliaCompat.TaskHandle::cancel);
         Logging.finer("Removed queue command for sender %s.", senderName);
     }
 

@@ -148,6 +148,19 @@ public final class WorldManager {
     }
 
     /**
+     * 获取本插件实例, 用于 Folia/Canvas 调度器注册.
+     * WorldManager 未直接注入 Plugin, 通过 PluginManager 按 name 查找.
+     */
+    private org.bukkit.plugin.Plugin getMVPlugin() {
+        org.bukkit.plugin.Plugin p = this.pluginManager.getPlugin("Multiverse-Core");
+        if (p == null) {
+            // 兜底:取第一个启用的本插件
+            p = this.pluginManager.getPlugin("multiverse-core");
+        }
+        return p;
+    }
+
+    /**
      * Loads all worlds from the worlds config.
      *
      * @return The result of the load.
@@ -975,7 +988,32 @@ public final class WorldManager {
     private Attempt<World, WorldCreatorFailureReason> createBukkitWorld(WorldCreator worldCreator) {
         return Try.of(() -> {
             this.loadTracker.add(worldCreator.name());
-            World world = worldCreator.createWorld();
+            // Canvas/Folia: createWorld 必须在 global tick 或 startup 线程;
+            // Paper: 主线程. 用 runGlobal 路由, 阻塞等待结果(后续逻辑依赖世界对象).
+            java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.atomic.AtomicReference<World> worldRef = new java.util.concurrent.atomic.AtomicReference<>();
+            java.util.concurrent.atomic.AtomicReference<Throwable> errRef = new java.util.concurrent.atomic.AtomicReference<>();
+            com.folia.compat.FoliaCompat.runGlobal(getMVPlugin(), () -> {
+                try {
+                    worldRef.set(worldCreator.createWorld());
+                } catch (Throwable t) {
+                    errRef.set(t);
+                } finally {
+                    latch.countDown();
+                }
+            });
+            try {
+                latch.await();
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw new MultiverseWorldException(Message.of(MVCorei18n.EXCEPTION_MULTIVERSEWORLD_CREATENULL));
+            }
+            Throwable err = errRef.get();
+            if (err != null) {
+                if (err instanceof Exception) throw (Exception) err;
+                throw new RuntimeException(err);
+            }
+            World world = worldRef.get();
             if (world == null) {
                 throw new MultiverseWorldException(Message.of(MVCorei18n.EXCEPTION_MULTIVERSEWORLD_CREATENULL));
             }
@@ -1004,11 +1042,25 @@ public final class WorldManager {
                 return;
             }
             unloadTracker.add(world.getName());
-            if (!Bukkit.unloadWorld(world, save)) {
+            // Canvas: 同步 unloadWorld 抛异常, 改用 WorldUnloadCompat (反射调 unloadWorldAsync, 路由到 global 线程).
+            // Paper: 走原同步 Bukkit.unloadWorld. 上游 Folia: 抛 UnsupportedOperationException.
+            // 阻塞等待异步结果, 保持本方法同步签名 (调用链是同步 Attempt/Try).
+            boolean ok;
+            try {
+                ok = com.folia.compat.WorldUnloadCompat
+                        .unloadWorldAsync(getMVPlugin(), world, save).get();
+            } catch (java.util.concurrent.ExecutionException ee) {
+                Throwable cause = ee.getCause();
+                if (cause instanceof Exception) throw (Exception) cause;
+                throw new RuntimeException(cause);
+            }
+            if (!ok) {
                 throwUnloadException(world);
             }
             Logging.fine("Bukkit unloaded world: " + world.getName());
-        }).andFinally(() -> unloadTracker.remove(world.getName()));
+        }).andFinally(() -> {
+            if (world != null) unloadTracker.remove(world.getName());
+        });
     }
 
     private void throwUnloadException(World world) throws MultiverseWorldException {

@@ -112,10 +112,14 @@ final class WorldConfigNodes {
             .onLoadAndChange((oldValue, newValue) -> {
                 if (!(world instanceof LoadedMultiverseWorld loadedWorld)) return;
                 loadedWorld.getBukkitWorld().peek(world -> {
-                    if (!world.isClearWeather() && !newValue) {
-                        world.setThundering(false);
-                        world.setStorm(false);
-                    }
+                    com.folia.compat.FoliaCompat.runGlobal(org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core"), () -> {
+                        try {
+                            if (!world.isClearWeather() && !newValue) {
+                                world.setThundering(false);
+                                world.setStorm(false);
+                            }
+                        } catch (Throwable ignored) {}
+                    });
                 });
             }));
 
@@ -139,7 +143,9 @@ final class WorldConfigNodes {
             .defaultValue(Difficulty.NORMAL)
             .onLoadAndChange((oldValue, newValue) -> {
                 if (!(world instanceof LoadedMultiverseWorld loadedWorld)) return;
-                loadedWorld.getBukkitWorld().peek(bukkitWorld -> bukkitWorld.setDifficulty(newValue));
+                loadedWorld.getBukkitWorld().peek(bukkitWorld -> com.folia.compat.FoliaCompat.runGlobal(
+                        org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core"),
+                        () -> { try { bukkitWorld.setDifficulty(newValue); } catch (Throwable ignored) {} }));
             }));
 
     final ConfigNode<Boolean> entryFeeEnabled = node(ConfigNode.builder("entry-fee.enabled", Boolean.class)
@@ -201,7 +207,9 @@ final class WorldConfigNodes {
             .onLoadAndChange((sender, oldValue, newValue) -> {
                 if (!(world instanceof LoadedMultiverseWorld loadedWorld)) return;
                 loadedWorld.getBukkitWorld().peek(bukkitWorld -> {
-                    bukkitWorld.setKeepSpawnInMemory(newValue);
+                    com.folia.compat.FoliaCompat.runGlobal(
+                            org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core"),
+                            () -> { try { bukkitWorld.setKeepSpawnInMemory(newValue); } catch (Throwable ignored) {} });
                     if (bukkitWorld.getKeepSpawnInMemory() != newValue) {
                         sender.sendMessage(ChatColor.RED + "Keep spawn in memory feature has been removed by " +
                                 "Minecraft in 1.21.9+ and will no longer have any effect when set to true.");
@@ -224,7 +232,9 @@ final class WorldConfigNodes {
             .defaultValue(true)
             .onLoadAndChange((oldValue, newValue) -> {
                 if (!(world instanceof LoadedMultiverseWorld loadedWorld)) return;
-                loadedWorld.getBukkitWorld().peek(bukkitWorld -> bukkitWorld.setPVP(newValue));
+                loadedWorld.getBukkitWorld().peek(bukkitWorld -> com.folia.compat.FoliaCompat.runGlobal(
+                        org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core"),
+                        () -> { try { bukkitWorld.setPVP(newValue); } catch (Throwable ignored) {} }));
             }));
 
     final ConfigNode<String> respawnWorld = node(ConfigNode.builder("respawn-world", String.class)

@@ -432,9 +432,12 @@ final class MVPlayerListener implements CoreListener {
             doGameModeAndFlightEnforcement(player, world);
             return;
         }
-        server.getScheduler().runTaskLater(
+        // 延迟后强制游戏模式/飞行: 玩家实体操作, 必须经 EntityScheduler(Folia); 玩家下线时静默
+        com.folia.compat.FoliaCompat.runEntityLater(
                 this.plugin,
+                player,
                 () -> doGameModeAndFlightEnforcement(player, world),
+                () -> {},
                 config.getGamemodeAndFlightEnforceDelay()
         );
     }

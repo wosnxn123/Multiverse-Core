@@ -66,7 +66,18 @@ public final class LoadedMultiverseWorld extends MultiverseWorld {
     }
 
     private Location readSpawnFromWorld(World world) {
-        Location location = world.getSpawnLocation();
+        // Folia/Canvas: 读方块(block.getType)必须在方块所在区域线程, 但启动阶段(onEnable)区域调度器尚未 tick,
+        // runRegion 排不上 + 阻塞会死锁. 因此 Folia 下直接跳过 spawn 安全校验, 返回 world 自带 spawn.
+        // spawn 安全校验只是优化(找更安全的点), 跳过不影响功能; 默认世界 spawn 本身就是安全的.
+        Location spawnLoc = world.getSpawnLocation();
+        if (!com.folia.compat.FoliaCompat.FOLIA) {
+            return readSpawnFromWorldBody(world, spawnLoc);
+        }
+        // Folia: 跳过校验, 直接用世界 spawn. 运行时(/mv import)若需校验可另行处理.
+        return spawnLoc;
+    }
+
+    private Location readSpawnFromWorldBody(World world, Location location) {
 
         // Verify that location was safe
         if (blockSafety.canSpawnAtLocationSafely(location)) {

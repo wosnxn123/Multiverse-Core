@@ -244,10 +244,10 @@ public final class AsyncSafetyTeleporterAction {
         return AsyncAttemptsAggregate.allOfAggregate(toTeleport.stream()
                         .map(passenger -> doAsyncTeleport(passenger, location))
                         .toList())
-                .onSuccess(() -> Bukkit.getScheduler().runTask(multiverseCore, () -> {
+                .onSuccess(() -> com.folia.compat.FoliaCompat.runEntity(multiverseCore, teleportee, () -> {
                     passengers.forEach(teleportee::addPassenger);
                     Logging.finer("Mounted %d passengers to %s", passengers.size(), teleportee.getName());
-                }));
+                }, () -> {}));
     }
 
     private AsyncAttempt<Void, TeleportFailureReason> doSingleTeleport(
@@ -272,6 +272,8 @@ public final class AsyncSafetyTeleporterAction {
     private void applyPostTeleportVelocity(@NotNull Entity teleportee) {
         locationOrDestination.peek(destination ->
                 destination.getVelocity(teleportee).peek(velocity ->
-                        Bukkit.getScheduler().runTaskLater(multiverseCore, () -> teleportee.setVelocity(velocity), 1L)));
+                        // 设速度是实体操作, 经 EntityScheduler; 玩家/实体退役时静默
+                        com.folia.compat.FoliaCompat.runEntityLater(multiverseCore, teleportee,
+                                () -> teleportee.setVelocity(velocity), () -> {}, 1L)));
     }
 }

@@ -42,8 +42,9 @@ final class DumpsService {
 
         // Initialise and add info to the debug event
         MVDumpsDebugInfoEvent versionEvent = createAndCallDebugInfoEvent();
-        new DumpsLogPoster(plugin, issuer, servicesType, getLogs(), versionEvent)
-                .runTaskAsynchronously(plugin);
+        // 异步上传日志(HTTP + 发消息, 线程安全), Folia 用 AsyncScheduler, Paper 用异步主线程
+        com.folia.compat.FoliaCompat.runAsync(plugin,
+                new DumpsLogPoster(plugin, issuer, servicesType, getLogs(), versionEvent)::run);
     }
 
     /**
