@@ -9,7 +9,7 @@ import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.mvplugins.multiverse.core.utils.ReflectHelper;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
