@@ -1,4 +1,4 @@
-name: Multiverse-Core
+﻿name: Multiverse-Core
 main: org.mvplugins.multiverse.core.MultiverseCore
 authors: ['dumptruckman', 'Rigby', 'fernferret', 'lithium3141', 'main--', 'benwoo1110', 'Zax71']
 website: 'https://modrinth.com/plugin/multiverse-core'
@@ -6,4 +6,4 @@ description: 'The original Bukkit Multi-World Plugin!'
 softdepend: ['Vault', 'PlaceholderAPI']
 api-version: 1.13
 folia-supported: true
-version: 5.7.1-folia
+version: 5.7.2-canvas

@@ -1,6 +1,6 @@
-## Fork 修改说明
+﻿## Fork 修改说明
 
-本 fork 为 Multiverse-Core 添加了 Folia/Canvas 兼容支持（版本 `5.7.1-folia`）。
+本 fork 为 Multiverse-Core 添加了 Folia/Canvas 兼容支持（版本 `5.7.2-canvas`）。
 
 ### 修改内容
 
@@ -13,7 +13,7 @@
 - **WorldConfigNodes**：`difficulty`/`pvp`/`weather` 等设置变更路由到 global region。
 - **调度器迁移**：迁移 6 个调度器文件到 Folia 兼容调度。
 - **readSpawnFromWorld**：Folia 下跳过 spawn 安全校验，避免启动死锁。
-- **plugin.yml**：`folia-supported: true`，版本 `5.7.1-folia`。
+- **plugin.yml**：`folia-supported: true`，版本 `5.7.2-canvas`。
 
 ### 兼容性（重要）
 
