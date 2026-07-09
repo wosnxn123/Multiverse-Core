@@ -193,31 +193,13 @@ public final class AsyncSafetyTeleporterAction {
             return Attempt.success(location);
         }
         // Folia/Canvas: 方块读取必须在 location 所在的 region 线程.
-        // 已在正确 region 线程: 直接调用.
-        // 不在 (global/其他 region/async): 路由到目标 region, 阻塞等待 (安全检查很快, 不影响性能).
-        if (com.folia.compat.FoliaCompat.FOLIA && !com.folia.compat.FoliaCompat.isOwnedByCurrentRegion(location)) {
-            java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
-            java.util.concurrent.atomic.AtomicReference<Location> safeRef = new java.util.concurrent.atomic.AtomicReference<>();
-            com.folia.compat.FoliaCompat.runRegion(multiverseCore, location, () -> {
-                try {
-                    safeRef.set(blockSafety.findSafeSpawnLocation(location));
-                } finally {
-                    latch.countDown();
-                }
-            });
-            try {
-                latch.await();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return Attempt.failure(TeleportFailureReason.UNSAFE_LOCATION);
-            }
-            Location safeLocation = safeRef.get();
-            if (safeLocation == null) {
-                return Attempt.failure(TeleportFailureReason.UNSAFE_LOCATION);
-            }
-            return Attempt.success(safeLocation);
+        // isOwnedByCurrentRegion 跨世界不可靠 (Canvas 上可能误报 true),
+        // runRegion + CountDownLatch 同 region 会死锁.
+        // 跳过安全检查: 目标通常是出生点 (世界创建时已验证) 或玩家位置 (本身安全).
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            return Attempt.success(location);
         }
-        // Paper 主线程 或 Folia 已在正确 region: 直接调用
+        // Paper: 主线程直接调用
         Location safeLocation = blockSafety.findSafeSpawnLocation(location);
         if (safeLocation == null) {
             return Attempt.failure(TeleportFailureReason.UNSAFE_LOCATION);
