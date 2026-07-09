@@ -98,14 +98,28 @@ class DeleteCommand extends CoreCommand {
     }
 
     private void doWorldDeleting(MVCommandIssuer issuer, MultiverseWorld world) {
-        worldManager.deleteWorld(DeleteWorldOptions.world(world))
-                .onSuccess(deletedWorldName -> {
-                    Logging.fine("World delete success: " + deletedWorldName);
-                    issuer.sendInfo(MVCorei18n.DELETE_SUCCESS, Replace.WORLD.with(deletedWorldName));
-                }).onFailure(failure -> {
-                    Logging.fine("World delete failure: " + failure);
-                    issuer.sendError(failure.getFailureMessage());
-                });
+        // Folia/Canvas: deleteWorld internally calls unloadWorldAsync which requires global tick thread.
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            org.bukkit.plugin.Plugin mvPlugin = org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core");
+            org.bukkit.Bukkit.getGlobalRegionScheduler().execute(mvPlugin, () ->
+                    worldManager.deleteWorld(DeleteWorldOptions.world(world))
+                            .onSuccess(deletedWorldName -> {
+                                Logging.fine("World delete success: " + deletedWorldName);
+                                issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] World deleted: " + deletedWorldName));
+                            }).onFailure(failure -> {
+                                Logging.fine("World delete failure: " + failure);
+                                issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] Failed: " + failure.getFailureMessage()));
+                            }));
+        } else {
+            worldManager.deleteWorld(DeleteWorldOptions.world(world))
+                    .onSuccess(deletedWorldName -> {
+                        Logging.fine("World delete success: " + deletedWorldName);
+                        issuer.sendInfo(MVCorei18n.DELETE_SUCCESS, Replace.WORLD.with(deletedWorldName));
+                    }).onFailure(failure -> {
+                        Logging.fine("World delete failure: " + failure);
+                        issuer.sendError(failure.getFailureMessage());
+                    });
+        }
     }
 
     @Service
