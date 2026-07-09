@@ -192,6 +192,32 @@ public final class AsyncSafetyTeleporterAction {
         if (!this.checkSafety) {
             return Attempt.success(location);
         }
+        // Folia/Canvas: 方块读取必须在 location 所在的 region 线程.
+        // 已在正确 region 线程: 直接调用.
+        // 不在 (global/其他 region/async): 路由到目标 region, 阻塞等待 (安全检查很快, 不影响性能).
+        if (com.folia.compat.FoliaCompat.FOLIA && !com.folia.compat.FoliaCompat.isOwnedByCurrentRegion(location)) {
+            java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.atomic.AtomicReference<Location> safeRef = new java.util.concurrent.atomic.AtomicReference<>();
+            com.folia.compat.FoliaCompat.runRegion(multiverseCore, location, () -> {
+                try {
+                    safeRef.set(blockSafety.findSafeSpawnLocation(location));
+                } finally {
+                    latch.countDown();
+                }
+            });
+            try {
+                latch.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return Attempt.failure(TeleportFailureReason.UNSAFE_LOCATION);
+            }
+            Location safeLocation = safeRef.get();
+            if (safeLocation == null) {
+                return Attempt.failure(TeleportFailureReason.UNSAFE_LOCATION);
+            }
+            return Attempt.success(safeLocation);
+        }
+        // Paper 主线程 或 Folia 已在正确 region: 直接调用
         Location safeLocation = blockSafety.findSafeSpawnLocation(location);
         if (safeLocation == null) {
             return Attempt.failure(TeleportFailureReason.UNSAFE_LOCATION);
@@ -254,7 +280,15 @@ public final class AsyncSafetyTeleporterAction {
             @NotNull Entity teleportee,
             @NotNull Location location
     ) {
-        return AsyncAttempt.of(PaperLib.teleportAsync(teleportee, location), exception -> {
+        // Folia/Canvas: PaperLib.teleportAsync 在 Folia 下回退到同步传送, 会抛异常.
+        // 直接用 Entity.teleportAsync(Location), 它返回 CompletableFuture, 内部走 EntityScheduler.
+        java.util.concurrent.CompletableFuture<Boolean> tpFuture;
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            tpFuture = teleportee.teleportAsync(location);
+        } else {
+            tpFuture = PaperLib.teleportAsync(teleportee, location);
+        }
+        return AsyncAttempt.of(tpFuture, exception -> {
             Logging.warning("Failed to teleport %s to %s: %s",
                     teleportee.getName(), location, exception.getMessage());
             return Attempt.failure(TeleportFailureReason.TELEPORT_FAILED_EXCEPTION);

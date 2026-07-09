@@ -121,7 +121,7 @@ public final class WorldUnloadCompat {
         }
         // Canvas: 必须在 global tick 线程调 unloadWorldAsync
         CompletableFuture<Boolean> result = new CompletableFuture<>();
-        FoliaCompat.runGlobal(plugin, () -> {
+        Runnable unloadTask = () -> {
             try {
                 Consumer<Object> callback = r -> {
                     try {
@@ -141,7 +141,14 @@ public final class WorldUnloadCompat {
                 plugin.getLogger().log(Level.SEVERE, "Failed to invoke Canvas unloadWorldAsync for " + world.getName(), t);
                 result.completeExceptionally(t);
             }
-        });
+        };
+        // 已在 global 线程: 直接调用, 避免 runGlobal + .get() 死锁
+        // 不在 global 线程 (region/async): runGlobal 路由, 调用方 .get() 阻塞等待
+        if (FoliaCompat.isGlobalTickThread()) {
+            unloadTask.run();
+        } else {
+            FoliaCompat.runGlobal(plugin, unloadTask);
+        }
         return result;
     }
 

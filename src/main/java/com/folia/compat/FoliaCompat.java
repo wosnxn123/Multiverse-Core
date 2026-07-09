@@ -55,6 +55,10 @@ public final class FoliaCompat {
     private static final Method ENTITY_RUN_DELAYED;
     private static final Method ENTITY_EXECUTE;
 
+    // 线程检测方法 (Folia only)
+    private static final Method BUKKIT_IS_GLOBAL_TICK_THREAD;
+    private static final Method BUKKIT_IS_OWNED_BY_CURRENT_REGION;
+
     static {
         boolean folia;
         Method gGlobal = null, gAsync = null, gRegion = null, eSched = null;
@@ -62,6 +66,7 @@ public final class FoliaCompat {
         Method asRun = null, asRunDel = null, asRate = null;
         Method rgRunLoc = null, rgRunDelLoc = null;
         Method enRun = null, enRunDel = null, enExec = null;
+        Method bkIsGlobal = null, bkIsOwned = null;
         try {
             Class.forName("io.papermc.paper.threadedregions.scheduler.RegionScheduler");
             folia = true;
@@ -70,6 +75,14 @@ public final class FoliaCompat {
             Class<?> regionCls = Class.forName("io.papermc.paper.threadedregions.scheduler.RegionScheduler");
             Class<?> entitySchedCls = Class.forName("io.papermc.paper.threadedregions.scheduler.EntityScheduler");
             Class<?> taskCls = Class.forName("io.papermc.paper.threadedregions.scheduler.ScheduledTask");
+
+            // 线程检测: Bukkit.isGlobalTickThread() / Bukkit.isOwnedByCurrentRegion(Location)
+            try {
+                bkIsGlobal = Bukkit.class.getMethod("isGlobalTickThread");
+            } catch (NoSuchMethodException ignored) {}
+            try {
+                bkIsOwned = Bukkit.class.getMethod("isOwnedByCurrentRegion", Location.class);
+            } catch (NoSuchMethodException ignored) {}
 
             Method getServer = Bukkit.class.getMethod("getServer");
             Class<?> serverCls = getServer.getReturnType();
@@ -118,6 +131,8 @@ public final class FoliaCompat {
         ENTITY_RUN = enRun;
         ENTITY_RUN_DELAYED = enRunDel;
         ENTITY_EXECUTE = enExec;
+        BUKKIT_IS_GLOBAL_TICK_THREAD = bkIsGlobal;
+        BUKKIT_IS_OWNED_BY_CURRENT_REGION = bkIsOwned;
     }
 
     private FoliaCompat() {
@@ -202,6 +217,36 @@ public final class FoliaCompat {
             throw new RuntimeException(t);
         }
         return new TaskHandle(null, null);
+    }
+
+    // ============================ 线程检测 ============================
+
+    /**
+     * 当前线程是否为全局 tick 线程 (Folia/Canvas).
+     * Paper 始终返回 false (用 isPrimaryThread 判断).
+     * 用于: createWorld/unloadWorld 等操作前判断是否已在正确线程, 避免死锁.
+     */
+    public static boolean isGlobalTickThread() {
+        if (!FOLIA || BUKKIT_IS_GLOBAL_TICK_THREAD == null) return false;
+        try {
+            return (boolean) BUKKIT_IS_GLOBAL_TICK_THREAD.invoke(null);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * 当前线程是否拥有 location 所在区域的 tick 权限 (Folia/Canvas).
+     * Paper 始终返回 false.
+     * 用于: 读取方块 (安全出生点检查) 前判断是否已在正确 region 线程, 避免死锁.
+     */
+    public static boolean isOwnedByCurrentRegion(Location location) {
+        if (!FOLIA || BUKKIT_IS_OWNED_BY_CURRENT_REGION == null) return false;
+        try {
+            return (boolean) BUKKIT_IS_OWNED_BY_CURRENT_REGION.invoke(null, location);
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     // ============================ 实体调度 ============================
