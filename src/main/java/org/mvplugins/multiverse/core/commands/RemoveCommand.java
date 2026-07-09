@@ -79,16 +79,17 @@ class RemoveCommand extends CoreCommand {
     }
 
     private void doWorldRemoving(MVCommandIssuer issuer, MultiverseWorld world, ParsedCommandFlags parsedFlags) {
-        worldManager.removeWorld(RemoveWorldOptions.world(world)
+        com.folia.compat.FoliaCompat.runGlobal(com.folia.compat.FoliaCompat.getPlugin(), () ->
+                worldManager.removeWorld(RemoveWorldOptions.world(world)
                         .saveBukkitWorld(!parsedFlags.hasFlag(flags.noSave))
                         .unloadBukkitWorld(!parsedFlags.hasFlag(flags.noUnloadBukkitWorld)))
-                .onSuccess(removedWorldName -> {
-                    Logging.fine("World remove success: " + removedWorldName);
-                    issuer.sendInfo(MVCorei18n.REMOVE_SUCCESS, Replace.WORLD.with(removedWorldName));
-                }).onFailure(failure -> {
-                    Logging.fine("World remove failure: " + failure);
-                    issuer.sendError(failure.getFailureMessage());
-                });
+                        .onSuccess(removedWorldName -> {
+                            Logging.fine("World remove success: " + removedWorldName);
+                            issuer.sendInfo(MVCorei18n.REMOVE_SUCCESS, Replace.WORLD.with(removedWorldName));
+                        }).onFailure(failure -> {
+                            Logging.fine("World remove failure: " + failure);
+                            issuer.sendError(failure.getFailureMessage());
+                        }));
     }
 
     @Service

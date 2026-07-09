@@ -122,16 +122,17 @@ class RegenCommand extends CoreCommand {
                 .keepWorldBorder(!parsedFlags.hasFlag(flags.resetWorldBorder))
                 .keepFiles(parsedFlags.flagValue(flags.keepFiles));
 
-        worldManager.regenWorld(regenWorldOptions).onSuccess(newWorld -> {
-            Logging.fine("World regen success: " + newWorld);
-            issuer.sendInfo(MVCorei18n.REGEN_SUCCESS, Replace.WORLD.with(newWorld.getName()));
-            if (parsedFlags.hasFlag(flags.removePlayers)) {
-                playerWorldTeleporter.teleportPlayersToWorld(worldPlayers, newWorld);
-            }
-        }).onFailure(failure -> {
-            Logging.warning("World regen failure: " + failure);
-            issuer.sendError(failure.getFailureMessage());
-        });
+        com.folia.compat.FoliaCompat.runGlobal(com.folia.compat.FoliaCompat.getPlugin(), () ->
+                worldManager.regenWorld(regenWorldOptions).onSuccess(newWorld -> {
+                    Logging.fine("World regen success: " + newWorld);
+                    issuer.sendInfo(MVCorei18n.REGEN_SUCCESS, Replace.WORLD.with(newWorld.getName()));
+                    if (parsedFlags.hasFlag(flags.removePlayers)) {
+                        playerWorldTeleporter.teleportPlayersToWorld(worldPlayers, newWorld);
+                    }
+                }).onFailure(failure -> {
+                    Logging.warning("World regen failure: " + failure);
+                    issuer.sendError(failure.getFailureMessage());
+                }));
     }
 
     @Service

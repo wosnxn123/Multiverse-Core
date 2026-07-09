@@ -82,7 +82,7 @@ class CreateCommand extends CoreCommand {
 
         issuer.sendInfo(MVCorei18n.CREATE_LOADING);
 
-        worldManager.createWorld(CreateWorldOptions.worldName(worldName)
+        CreateWorldOptions options = CreateWorldOptions.worldName(worldName)
                         .biome(parsedFlags.flagValue(flags.biome, ""))
                         .bonusChest(parsedFlags.hasFlag(flags.bonusChest))
                         .environment(environment)
@@ -93,9 +93,11 @@ class CreateCommand extends CoreCommand {
                         .seed(parsedFlags.flagValue(flags.seed))
                         .useSpawnAdjust(!parsedFlags.hasFlag(flags.noAdjustSpawn))
                         .worldPropertyStrings(StringFormatter.parseCSVMap(parsedFlags.flagValue(flags.properties)))
-                        .worldType(parsedFlags.flagValue(flags.worldType, WorldType.NORMAL)))
-                .onSuccess(newWorld -> messageSuccess(issuer, newWorld))
-                .onFailure(failure -> messageFailure(issuer, failure));
+                        .worldType(parsedFlags.flagValue(flags.worldType, WorldType.NORMAL));
+        com.folia.compat.FoliaCompat.runGlobal(com.folia.compat.FoliaCompat.getPlugin(), () ->
+                worldManager.createWorld(options)
+                        .onSuccess(newWorld -> messageSuccess(issuer, newWorld))
+                        .onFailure(failure -> messageFailure(issuer, failure)));
     }
 
     private void messageWorldDetails(MVCommandIssuer issuer, String worldName,

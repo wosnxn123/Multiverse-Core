@@ -82,14 +82,15 @@ class UnloadCommand extends CoreCommand {
         UnloadWorldOptions unloadWorldOptions = UnloadWorldOptions.world(world)
                 .unloadBukkitWorld(!parsedFlags.hasFlag(flags.noUnloadBukkitWorld))
                 .saveBukkitWorld(!parsedFlags.hasFlag(flags.noSave));
-        worldManager.unloadWorld(unloadWorldOptions)
-                .onSuccess(loadedWorld -> {
-                    Logging.fine("World unload success: " + loadedWorld);
-                    issuer.sendInfo(MVCorei18n.UNLOAD_SUCCESS, Replace.WORLD.with(loadedWorld.getName()));
-                }).onFailure(failure -> {
-                    Logging.fine("World unload failure: " + failure);
-                    issuer.sendError(failure.getFailureMessage());
-                });
+        com.folia.compat.FoliaCompat.runGlobal(com.folia.compat.FoliaCompat.getPlugin(), () ->
+                worldManager.unloadWorld(unloadWorldOptions)
+                        .onSuccess(loadedWorld -> {
+                            Logging.fine("World unload success: " + loadedWorld);
+                            issuer.sendInfo(MVCorei18n.UNLOAD_SUCCESS, Replace.WORLD.with(loadedWorld.getName()));
+                        }).onFailure(failure -> {
+                            Logging.fine("World unload failure: " + failure);
+                            issuer.sendError(failure.getFailureMessage());
+                        }));
     }
 
     @Service

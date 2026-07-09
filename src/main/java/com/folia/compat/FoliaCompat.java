@@ -138,6 +138,19 @@ public final class FoliaCompat {
     private FoliaCompat() {
     }
 
+    private static Plugin cachedPlugin;
+
+    /**
+     * 获取 Multiverse-Core 插件实例 (缓存).
+     * 用于 FoliaCompat 调度器注册 (需要 Plugin 参数).
+     */
+    public static Plugin getPlugin() {
+        if (cachedPlugin == null) {
+            cachedPlugin = Bukkit.getPluginManager().getPlugin("Multiverse-Core");
+        }
+        return cachedPlugin;
+    }
+
     // ============================ 任务句柄 ============================
 
     /** 可取消的任务句柄,同时兼容 BukkitTask(Folia 上无统一类型时也用反射取消). */

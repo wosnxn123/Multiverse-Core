@@ -988,39 +988,10 @@ public final class WorldManager {
     private Attempt<World, WorldCreatorFailureReason> createBukkitWorld(WorldCreator worldCreator) {
         return Try.of(() -> {
             this.loadTracker.add(worldCreator.name());
-            // Canvas/Folia: createWorld 必须在 global tick 或 startup 线程.
+            // Canvas/Folia: createWorld 必须在 global tick 线程.
+            // 调用方 (命令) 通过 FoliaCompat.runGlobal 异步路由到 global 线程, 不阻塞 region 线程.
             // Paper: 主线程, 直接调用.
-            // Folia + 已在 global 线程: 直接调用 (避免 runGlobal + CountDownLatch 死锁).
-            // Folia + region/async 线程: runGlobal 路由到 global 线程, 阻塞等待结果.
-            World world;
-            if (!com.folia.compat.FoliaCompat.FOLIA || com.folia.compat.FoliaCompat.isGlobalTickThread()) {
-                world = worldCreator.createWorld();
-            } else {
-                java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
-                java.util.concurrent.atomic.AtomicReference<World> worldRef = new java.util.concurrent.atomic.AtomicReference<>();
-                java.util.concurrent.atomic.AtomicReference<Throwable> errRef = new java.util.concurrent.atomic.AtomicReference<>();
-                com.folia.compat.FoliaCompat.runGlobal(getMVPlugin(), () -> {
-                    try {
-                        worldRef.set(worldCreator.createWorld());
-                    } catch (Throwable t) {
-                        errRef.set(t);
-                    } finally {
-                        latch.countDown();
-                    }
-                });
-                try {
-                    latch.await();
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new MultiverseWorldException(Message.of(MVCorei18n.EXCEPTION_MULTIVERSEWORLD_CREATENULL));
-                }
-                Throwable err = errRef.get();
-                if (err != null) {
-                    if (err instanceof Exception) throw (Exception) err;
-                    throw new RuntimeException(err);
-                }
-                world = worldRef.get();
-            }
+            World world = worldCreator.createWorld();
             if (world == null) {
                 throw new MultiverseWorldException(Message.of(MVCorei18n.EXCEPTION_MULTIVERSEWORLD_CREATENULL));
             }
