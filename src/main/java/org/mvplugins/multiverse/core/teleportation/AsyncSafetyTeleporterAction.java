@@ -192,6 +192,31 @@ public final class AsyncSafetyTeleporterAction {
         if (!this.checkSafety) {
             return Attempt.success(location);
         }
+        // Folia/Canvas: block reads must happen on the target world's region thread.
+        // Route the safety check to the location's region and block for the result.
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.atomic.AtomicReference<Location> safeRef = new java.util.concurrent.atomic.AtomicReference<>();
+            com.folia.compat.FoliaCompat.runRegion(multiverseCore, location, () -> {
+                try {
+                    safeRef.set(blockSafety.findSafeSpawnLocation(location));
+                } finally {
+                    latch.countDown();
+                }
+            });
+            try {
+                latch.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return Attempt.failure(TeleportFailureReason.UNSAFE_LOCATION);
+            }
+            Location safeLocation = safeRef.get();
+            if (safeLocation == null) {
+                return Attempt.failure(TeleportFailureReason.UNSAFE_LOCATION);
+            }
+            return Attempt.success(safeLocation);
+        }
+        // Paper: direct call on main thread
         Location safeLocation = blockSafety.findSafeSpawnLocation(location);
         if (safeLocation == null) {
             return Attempt.failure(TeleportFailureReason.UNSAFE_LOCATION);
@@ -254,6 +279,25 @@ public final class AsyncSafetyTeleporterAction {
             @NotNull Entity teleportee,
             @NotNull Location location
     ) {
+        // Folia/Canvas: PaperLib.teleportAsync falls back to sync teleport on Folia,
+        // which throws UnsupportedOperationException. Use EntityScheduler instead.
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            // Use teleportAsync directly - it returns CompletableFuture, no blocking needed
+            java.util.concurrent.CompletableFuture<Boolean> tpFuture = teleportee.teleportAsync(location);
+            return AsyncAttempt.of(tpFuture, exception -> {
+                Logging.warning("Failed to teleport %s to %s: %s",
+                        teleportee.getName(), location, exception.getMessage());
+                return Attempt.failure(TeleportFailureReason.TELEPORT_FAILED_EXCEPTION);
+            }).mapAttempt(success -> {
+                if (success) {
+                    applyPostTeleportVelocity(teleportee);
+                    Logging.finer("Teleported async %s to %s", teleportee.getName(), location);
+                    return Attempt.success(null);
+                }
+                Logging.warning("Failed to async teleport %s to %s", teleportee.getName(), location);
+                return Attempt.failure(TeleportFailureReason.TELEPORT_FAILED);
+            });
+        }
         return AsyncAttempt.of(PaperLib.teleportAsync(teleportee, location), exception -> {
             Logging.warning("Failed to teleport %s to %s: %s",
                     teleportee.getName(), location, exception.getMessage());

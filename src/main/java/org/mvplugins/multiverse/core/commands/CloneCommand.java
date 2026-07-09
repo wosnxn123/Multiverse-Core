@@ -68,14 +68,22 @@ class CloneCommand extends CoreCommand {
                 .keepGameRule(!parsedFlags.hasFlag(flags.resetGamerules))
                 .keepWorldBorder(!parsedFlags.hasFlag(flags.resetWorldBorder))
                 .saveBukkitWorld(!parsedFlags.hasFlag(flags.noSave));
-        worldManager.cloneWorld(cloneWorldOptions)
-                .onSuccess(newWorld -> {
-                    Logging.fine("World clone success: " + newWorld);
-                    issuer.sendInfo(MVCorei18n.CLONE_SUCCESS, Replace.WORLD.with(newWorld.getName()));
-                }).onFailure(failure -> {
-                    Logging.fine("World clone failure: " + failure);
-                    issuer.sendError(failure.getFailureMessage());
-                });
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            org.bukkit.plugin.Plugin mvPlugin = org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core");
+            org.bukkit.Bukkit.getGlobalRegionScheduler().execute(mvPlugin, () ->
+                    worldManager.cloneWorld(cloneWorldOptions)
+                            .onSuccess(newWorld -> issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] World cloned: " + newWorld.getName())))
+                            .onFailure(failure -> issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] Failed: " + failure.getFailureMessage()))));
+        } else {
+            worldManager.cloneWorld(cloneWorldOptions)
+                    .onSuccess(newWorld -> {
+                        Logging.fine("World clone success: " + newWorld);
+                        issuer.sendInfo(MVCorei18n.CLONE_SUCCESS, Replace.WORLD.with(newWorld.getName()));
+                    }).onFailure(failure -> {
+                        Logging.fine("World clone failure: " + failure);
+                        issuer.sendError(failure.getFailureMessage());
+                    });
+        }
     }
 
     @Service
