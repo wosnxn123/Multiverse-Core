@@ -82,14 +82,28 @@ class UnloadCommand extends CoreCommand {
         UnloadWorldOptions unloadWorldOptions = UnloadWorldOptions.world(world)
                 .unloadBukkitWorld(!parsedFlags.hasFlag(flags.noUnloadBukkitWorld))
                 .saveBukkitWorld(!parsedFlags.hasFlag(flags.noSave));
-        worldManager.unloadWorld(unloadWorldOptions)
-                .onSuccess(loadedWorld -> {
-                    Logging.fine("World unload success: " + loadedWorld);
-                    issuer.sendInfo(MVCorei18n.UNLOAD_SUCCESS, Replace.WORLD.with(loadedWorld.getName()));
-                }).onFailure(failure -> {
-                    Logging.fine("World unload failure: " + failure);
-                    issuer.sendError(failure.getFailureMessage());
-                });
+        // Folia/Canvas: unloadWorld must run on global region thread.
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            org.bukkit.plugin.Plugin mvPlugin = org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core");
+            org.bukkit.Bukkit.getGlobalRegionScheduler().execute(mvPlugin, () ->
+                    worldManager.unloadWorld(unloadWorldOptions)
+                            .onSuccess(loadedWorld -> {
+                                Logging.fine("World unload success: " + loadedWorld);
+                                issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] World unloaded: " + loadedWorld.getName()));
+                            }).onFailure(failure -> {
+                                Logging.fine("World unload failure: " + failure);
+                                issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] Failed: " + failure.getFailureMessage()));
+                            }));
+        } else {
+            worldManager.unloadWorld(unloadWorldOptions)
+                    .onSuccess(loadedWorld -> {
+                        Logging.fine("World unload success: " + loadedWorld);
+                        issuer.sendInfo(MVCorei18n.UNLOAD_SUCCESS, Replace.WORLD.with(loadedWorld.getName()));
+                    }).onFailure(failure -> {
+                        Logging.fine("World unload failure: " + failure);
+                        issuer.sendError(failure.getFailureMessage());
+                    });
+        }
     }
 
     @Service

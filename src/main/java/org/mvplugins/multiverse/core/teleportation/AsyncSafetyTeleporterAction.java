@@ -55,6 +55,11 @@ public final class AsyncSafetyTeleporterAction {
                 location -> true,
                 destination -> destination != null && destination.checkTeleportSafety()
         );
+        // Folia/Canvas: safety check reads target world blocks, which requires being on that world's region thread.
+        // Default to false on Folia to avoid cross-world block read exceptions.
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            this.checkSafety = false;
+        }
     }
 
     /**
@@ -254,6 +259,25 @@ public final class AsyncSafetyTeleporterAction {
             @NotNull Entity teleportee,
             @NotNull Location location
     ) {
+        // Folia/Canvas: PaperLib.teleportAsync falls back to sync teleport on Folia,
+        // which throws UnsupportedOperationException. Use EntityScheduler instead.
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            // Use teleportAsync directly - it returns CompletableFuture, no blocking needed
+            java.util.concurrent.CompletableFuture<Boolean> tpFuture = teleportee.teleportAsync(location);
+            return AsyncAttempt.of(tpFuture, exception -> {
+                Logging.warning("Failed to teleport %s to %s: %s",
+                        teleportee.getName(), location, exception.getMessage());
+                return Attempt.failure(TeleportFailureReason.TELEPORT_FAILED_EXCEPTION);
+            }).mapAttempt(success -> {
+                if (success) {
+                    applyPostTeleportVelocity(teleportee);
+                    Logging.finer("Teleported async %s to %s", teleportee.getName(), location);
+                    return Attempt.success(null);
+                }
+                Logging.warning("Failed to async teleport %s to %s", teleportee.getName(), location);
+                return Attempt.failure(TeleportFailureReason.TELEPORT_FAILED);
+            });
+        }
         return AsyncAttempt.of(PaperLib.teleportAsync(teleportee, location), exception -> {
             Logging.warning("Failed to teleport %s to %s: %s",
                     teleportee.getName(), location, exception.getMessage());

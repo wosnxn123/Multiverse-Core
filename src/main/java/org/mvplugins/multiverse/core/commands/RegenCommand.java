@@ -122,16 +122,31 @@ class RegenCommand extends CoreCommand {
                 .keepWorldBorder(!parsedFlags.hasFlag(flags.resetWorldBorder))
                 .keepFiles(parsedFlags.flagValue(flags.keepFiles));
 
-        worldManager.regenWorld(regenWorldOptions).onSuccess(newWorld -> {
-            Logging.fine("World regen success: " + newWorld);
-            issuer.sendInfo(MVCorei18n.REGEN_SUCCESS, Replace.WORLD.with(newWorld.getName()));
-            if (parsedFlags.hasFlag(flags.removePlayers)) {
-                playerWorldTeleporter.teleportPlayersToWorld(worldPlayers, newWorld);
-            }
-        }).onFailure(failure -> {
-            Logging.warning("World regen failure: " + failure);
-            issuer.sendError(failure.getFailureMessage());
-        });
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            org.bukkit.plugin.Plugin mvPlugin = org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core");
+            org.bukkit.Bukkit.getGlobalRegionScheduler().execute(mvPlugin, () ->
+                    worldManager.regenWorld(regenWorldOptions).onSuccess(newWorld -> {
+                        Logging.fine("World regen success: " + newWorld);
+                        issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] World regenerated: " + newWorld.getName()));
+                        if (parsedFlags.hasFlag(flags.removePlayers)) {
+                            playerWorldTeleporter.teleportPlayersToWorld(worldPlayers, newWorld);
+                        }
+                    }).onFailure(failure -> {
+                        Logging.warning("World regen failure: " + failure);
+                        issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] Failed: " + failure.getFailureMessage()));
+                    }));
+        } else {
+            worldManager.regenWorld(regenWorldOptions).onSuccess(newWorld -> {
+                Logging.fine("World regen success: " + newWorld);
+                issuer.sendInfo(MVCorei18n.REGEN_SUCCESS, Replace.WORLD.with(newWorld.getName()));
+                if (parsedFlags.hasFlag(flags.removePlayers)) {
+                    playerWorldTeleporter.teleportPlayersToWorld(worldPlayers, newWorld);
+                }
+            }).onFailure(failure -> {
+                Logging.warning("World regen failure: " + failure);
+                issuer.sendError(failure.getFailureMessage());
+            });
+        }
     }
 
     @Service

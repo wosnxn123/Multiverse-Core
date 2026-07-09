@@ -79,16 +79,26 @@ class RemoveCommand extends CoreCommand {
     }
 
     private void doWorldRemoving(MVCommandIssuer issuer, MultiverseWorld world, ParsedCommandFlags parsedFlags) {
-        worldManager.removeWorld(RemoveWorldOptions.world(world)
-                        .saveBukkitWorld(!parsedFlags.hasFlag(flags.noSave))
-                        .unloadBukkitWorld(!parsedFlags.hasFlag(flags.noUnloadBukkitWorld)))
-                .onSuccess(removedWorldName -> {
-                    Logging.fine("World remove success: " + removedWorldName);
-                    issuer.sendInfo(MVCorei18n.REMOVE_SUCCESS, Replace.WORLD.with(removedWorldName));
-                }).onFailure(failure -> {
-                    Logging.fine("World remove failure: " + failure);
-                    issuer.sendError(failure.getFailureMessage());
-                });
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            org.bukkit.plugin.Plugin mvPlugin = org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core");
+            org.bukkit.Bukkit.getGlobalRegionScheduler().execute(mvPlugin, () ->
+                    worldManager.removeWorld(RemoveWorldOptions.world(world)
+                            .saveBukkitWorld(!parsedFlags.hasFlag(flags.noSave))
+                            .unloadBukkitWorld(!parsedFlags.hasFlag(flags.noUnloadBukkitWorld)))
+                            .onSuccess(removedWorldName -> issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] World removed: " + removedWorldName)))
+                            .onFailure(failure -> issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] Failed: " + failure.getFailureMessage()))));
+        } else {
+            worldManager.removeWorld(RemoveWorldOptions.world(world)
+                            .saveBukkitWorld(!parsedFlags.hasFlag(flags.noSave))
+                            .unloadBukkitWorld(!parsedFlags.hasFlag(flags.noUnloadBukkitWorld)))
+                    .onSuccess(removedWorldName -> {
+                        Logging.fine("World remove success: " + removedWorldName);
+                        issuer.sendInfo(MVCorei18n.REMOVE_SUCCESS, Replace.WORLD.with(removedWorldName));
+                    }).onFailure(failure -> {
+                        Logging.fine("World remove failure: " + failure);
+                        issuer.sendError(failure.getFailureMessage());
+                    });
+        }
     }
 
     @Service

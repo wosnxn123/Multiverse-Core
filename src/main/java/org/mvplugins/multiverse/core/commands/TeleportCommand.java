@@ -102,7 +102,9 @@ final class TeleportCommand extends CoreCommand {
 
         safetyTeleporter.to(destination)
                 .by(issuer)
-                .checkSafety(!parsedFlags.hasFlag(flags.unsafe) && destination.checkTeleportSafety())
+                // Folia/Canvas: safety check reads target world blocks, which requires being on that world's region thread.
+                // Skip safety check on Folia to avoid cross-world block read exception.
+                .checkSafety(!com.folia.compat.FoliaCompat.FOLIA && !parsedFlags.hasFlag(flags.unsafe) && destination.checkTeleportSafety())
                 .passengerMode(config.getPassengerMode())
                 .teleportSingle(player)
                 .onSuccess(() -> {
@@ -139,7 +141,7 @@ final class TeleportCommand extends CoreCommand {
 
         safetyTeleporter.to(destination)
                 .by(issuer)
-                .checkSafety(!parsedFlags.hasFlag(flags.unsafe) && destination.checkTeleportSafety())
+                .checkSafety(!com.folia.compat.FoliaCompat.FOLIA && !parsedFlags.hasFlag(flags.unsafe) && destination.checkTeleportSafety())
                 .passengerMode(config.getPassengerMode())
                 .teleport(List.of(players))
                 .onSuccessCount(successCount -> {
