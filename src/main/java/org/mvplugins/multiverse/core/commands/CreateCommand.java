@@ -82,7 +82,7 @@ class CreateCommand extends CoreCommand {
 
         issuer.sendInfo(MVCorei18n.CREATE_LOADING);
 
-        worldManager.createWorld(CreateWorldOptions.worldName(worldName)
+        CreateWorldOptions options = CreateWorldOptions.worldName(worldName)
                         .biome(parsedFlags.flagValue(flags.biome, ""))
                         .bonusChest(parsedFlags.hasFlag(flags.bonusChest))
                         .environment(environment)
@@ -93,9 +93,23 @@ class CreateCommand extends CoreCommand {
                         .seed(parsedFlags.flagValue(flags.seed))
                         .useSpawnAdjust(!parsedFlags.hasFlag(flags.noAdjustSpawn))
                         .worldPropertyStrings(StringFormatter.parseCSVMap(parsedFlags.flagValue(flags.properties)))
-                        .worldType(parsedFlags.flagValue(flags.worldType, WorldType.NORMAL)))
-                .onSuccess(newWorld -> messageSuccess(issuer, newWorld))
-                .onFailure(failure -> messageFailure(issuer, failure));
+                        .worldType(parsedFlags.flagValue(flags.worldType, WorldType.NORMAL));
+
+        // Folia/Canvas: createWorld must run on global region thread.
+        // Blocking the region thread (where this command executes) causes deadlock.
+        // Dispatch to global thread and handle result via callback.
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            org.bukkit.plugin.Plugin mvPlugin = org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core");
+            org.bukkit.Bukkit.getGlobalRegionScheduler().execute(mvPlugin, () -> {
+                worldManager.createWorld(options)
+                        .onSuccess(newWorld -> issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] World created: " + newWorld.getName())))
+                        .onFailure(failure -> issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] Failed: " + failure.getFailureMessage())));
+            });
+        } else {
+            worldManager.createWorld(options)
+                    .onSuccess(newWorld -> messageSuccess(issuer, newWorld))
+                    .onFailure(failure -> messageFailure(issuer, failure));
+        }
     }
 
     private void messageWorldDetails(MVCommandIssuer issuer, String worldName,
