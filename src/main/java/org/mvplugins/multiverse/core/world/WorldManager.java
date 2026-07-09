@@ -988,32 +988,40 @@ public final class WorldManager {
     private Attempt<World, WorldCreatorFailureReason> createBukkitWorld(WorldCreator worldCreator) {
         return Try.of(() -> {
             this.loadTracker.add(worldCreator.name());
-            // Canvas/Folia: createWorld 必须在 global tick 或 startup 线程;
-            // Paper: 主线程. 用 runGlobal 路由, 阻塞等待结果(后续逻辑依赖世界对象).
-            java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
-            java.util.concurrent.atomic.AtomicReference<World> worldRef = new java.util.concurrent.atomic.AtomicReference<>();
-            java.util.concurrent.atomic.AtomicReference<Throwable> errRef = new java.util.concurrent.atomic.AtomicReference<>();
-            com.folia.compat.FoliaCompat.runGlobal(getMVPlugin(), () -> {
+            // Canvas/Folia: createWorld via GlobalRegionScheduler blocks the calling region thread
+            // when the command is issued from an EntityScheduler tick, causing a deadlock/watchdog timeout.
+            // Instead, run createWorld on the AsyncScheduler and block the current thread on a latch.
+            // The async thread is not a region thread, so no deadlock.
+            // Paper: just run on main thread synchronously.
+            World world = null;
+            if (com.folia.compat.FoliaCompat.FOLIA) {
+                java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+                java.util.concurrent.atomic.AtomicReference<World> worldRef = new java.util.concurrent.atomic.AtomicReference<>();
+                java.util.concurrent.atomic.AtomicReference<Throwable> errRef = new java.util.concurrent.atomic.AtomicReference<>();
+                com.folia.compat.FoliaCompat.runAsync(getMVPlugin(), () -> com.folia.compat.FoliaCompat.runGlobal(getMVPlugin(), () -> {
+                    try {
+                        worldRef.set(worldCreator.createWorld());
+                    } catch (Throwable t) {
+                        errRef.set(t);
+                    } finally {
+                        latch.countDown();
+                    }
+                }));
                 try {
-                    worldRef.set(worldCreator.createWorld());
-                } catch (Throwable t) {
-                    errRef.set(t);
-                } finally {
-                    latch.countDown();
+                    latch.await();
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new MultiverseWorldException(Message.of(MVCorei18n.EXCEPTION_MULTIVERSEWORLD_CREATENULL));
                 }
-            });
-            try {
-                latch.await();
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                throw new MultiverseWorldException(Message.of(MVCorei18n.EXCEPTION_MULTIVERSEWORLD_CREATENULL));
+                Throwable err = errRef.get();
+                if (err != null) {
+                    if (err instanceof Exception) throw (Exception) err;
+                    throw new RuntimeException(err);
+                }
+                world = worldRef.get();
+            } else {
+                world = worldCreator.createWorld();
             }
-            Throwable err = errRef.get();
-            if (err != null) {
-                if (err instanceof Exception) throw (Exception) err;
-                throw new RuntimeException(err);
-            }
-            World world = worldRef.get();
             if (world == null) {
                 throw new MultiverseWorldException(Message.of(MVCorei18n.EXCEPTION_MULTIVERSEWORLD_CREATENULL));
             }
