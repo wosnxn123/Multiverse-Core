@@ -81,7 +81,7 @@ final class SpawnCommand extends CoreCommand {
         Map<World, List<Entity>> playersByWorld = Arrays.stream(players)
                 .collect(Collectors.groupingBy(Entity::getWorld));
         playersByWorld.forEach((world, entities) ->
-                teleportPlayersToSpawn(issuer, world, entities, !parsedFlags.hasFlag(flags.unsafe)));
+                teleportPlayersToSpawn(issuer, world, entities, !com.folia.compat.FoliaCompat.FOLIA && !parsedFlags.hasFlag(flags.unsafe)));
     }
 
     private void teleportPlayersToSpawn(MVCommandIssuer issuer, World world,

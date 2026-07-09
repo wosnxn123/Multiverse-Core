@@ -64,21 +64,30 @@ class ImportCommand extends CoreCommand {
         ParsedCommandFlags parsedFlags = flags.parse(flagArray);
 
         issuer.sendInfo(MVCorei18n.IMPORT_IMPORTING, Replace.WORLD.with(worldName));
-        worldManager.importWorld(ImportWorldOptions.worldName(worldName)
+        ImportWorldOptions options = ImportWorldOptions.worldName(worldName)
                         .biome(parsedFlags.flagValue(flags.biome, ""))
                         .environment(environment)
                         .generator(parsedFlags.flagValue(flags.generator))
                         .generatorSettings(parsedFlags.flagValue(flags.generatorSettings, ""))
                         .useSpawnAdjust(!parsedFlags.hasFlag(flags.noAdjustSpawn))
-                        .doFolderCheck(!parsedFlags.hasFlag(flags.skipFolderCheck)))
-                .onSuccess(newWorld -> {
-                    Logging.fine("World import success: " + newWorld);
-                    issuer.sendInfo(MVCorei18n.IMPORT_SUCCESS, Replace.WORLD.with(newWorld.getName()));
-                })
-                .onFailure(failure -> {
-                    Logging.fine("World import failure: " + failure);
-                    issuer.sendError(failure.getFailureMessage());
-                });
+                        .doFolderCheck(!parsedFlags.hasFlag(flags.skipFolderCheck));
+        if (com.folia.compat.FoliaCompat.FOLIA) {
+            org.bukkit.plugin.Plugin mvPlugin = org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core");
+            org.bukkit.Bukkit.getGlobalRegionScheduler().execute(mvPlugin, () ->
+                    worldManager.importWorld(options)
+                            .onSuccess(newWorld -> issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] World imported: " + newWorld.getName())))
+                            .onFailure(failure -> issuer.getIssuer().sendMessage(net.kyori.adventure.text.Component.text("[Multiverse] Failed: " + failure.getFailureMessage()))));
+        } else {
+            worldManager.importWorld(options)
+                    .onSuccess(newWorld -> {
+                        Logging.fine("World import success: " + newWorld);
+                        issuer.sendInfo(MVCorei18n.IMPORT_SUCCESS, Replace.WORLD.with(newWorld.getName()));
+                    })
+                    .onFailure(failure -> {
+                        Logging.fine("World import failure: " + failure);
+                        issuer.sendError(failure.getFailureMessage());
+                    });
+        }
     }
 
     @Service
