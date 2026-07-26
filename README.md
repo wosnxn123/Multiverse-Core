@@ -4,15 +4,18 @@
 
 ### 修改内容
 
-- **FoliaCompat 工具类**：运行时检测 Folia，并将调度路由到对应的 Scheduler。
+- **FoliaCompat 工具类**：运行时检测 Folia（探测服务端专属类 `RegionizedServer`，**不能**用 `threadedregions.scheduler.*` —— 那个包普通 Paper 也自带，会把 Paper 误判成 Folia），并将调度路由到对应的 Scheduler。
+  - `runWorldMutation`：世界创建/卸载流程的入口。Folia/Canvas 下走**异步线程**（在那里阻塞才是合法的），Paper 下走 `runGlobal`。
+  - `callGlobal`：把单步操作派到 global tick 线程并等结果；已在该线程时内联执行；**在任何 tick 线程上调用会直接抛异常**——明确报错优于静默冻结。
 - **WorldUnloadCompat（世界卸载兼容）**：
-  - Canvas：线程感知调度（global 线程直接调用 `unloadWorldAsync`，其他线程路由+阻塞），反射调用 Canvas 专属 API。
+  - Canvas：反射调用 Canvas 专属的 `unloadWorldAsync`，返回 `CompletableFuture`。
   - Paper/Purpur：同步 `unloadWorld`。
   - 上游 Folia：不支持（Folia 未实现世界卸载 API，功能禁用并输出警告）。
-- **WorldManager**：`createBukkitWorld` 线程感知调度（global 线程直接调用，region 线程路由+阻塞），避免死锁。
-- **WorldConfigNodes**：`difficulty`/`pvp`/`weather` 等设置变更路由到 global region。
+  - **不要在 tick 线程上阻塞等待这个 future**：Canvas 只有在该世界所有 region 停止 tick 后才完成卸载，而 region 要靠自己 tick 才能读到 unload ticket 自我 deschedule，且 region tick 与 global tick 共用同一个线程池（默认 8 核及以下只有 1 个线程）。在 tick 线程上等 = 永久挂服。`WorldManager.unloadBukkitWorld` 已加守卫拒绝这种调用。
+- **WorldManager**：`createBukkitWorld` 自己用 `callGlobal` 跳到 global 线程并等结果（不依赖调用方恰好在正确线程），因此 regen 那种「先卸载再创建」的异步流程也能正确工作。
+- **WorldConfigNodes**：`difficulty`/`pvp`/`weather`/`keep-spawn-in-memory` 等设置变更路由到 global region。注意 `runGlobal` 在 Folia 下**总是入队**，所以需要读回被修改的值时必须把读取一并放进 runnable 内部。
 - **调度器迁移**：迁移 6 个调度器文件到 Folia 兼容调度。
-- **AsyncSafetyTeleporterAction**：安全检查线程感知（已在正确 region 直接调用，否则路由+阻塞）；Folia 下用 `Entity.teleportAsync` 替代 PaperLib。
+- **AsyncSafetyTeleporterAction**：Folia/Canvas 下**跳过**方块安全检查（原因：`isOwnedByCurrentRegion` 跨世界不可靠，而 `runRegion` + 阻塞等待在同 region 会自锁），改用 `Entity.teleportAsync`；Paper 路径保留原安全检查。**这是已知的功能损失**——Folia 下 `/mvtp` 不会把危险落点纠正到安全位置。
 - **readSpawnFromWorld**：Folia 下跳过 spawn 安全校验，避免启动死锁。
 - **plugin.yml**：`folia-supported: true`，版本 `5.7.2-canvas`。
 
