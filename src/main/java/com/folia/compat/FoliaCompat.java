@@ -183,8 +183,8 @@ public final class FoliaCompat {
         if (!FOLIA) {
             return new TaskHandle(Bukkit.getScheduler().runTask(plugin, runnable), null);
         }
-        invokeGlobal(plugin, runnable, GLOBAL_RUN, 0, 0, false, false);
-        return new TaskHandle(null, null);
+        // 保留返回的 ScheduledTask, 否则 TaskHandle#cancel 在 Folia 上是静默空操作.
+        return new TaskHandle(null, invokeGlobal(plugin, runnable, GLOBAL_RUN, 0, 0, false, false));
     }
 
     /** 延迟 delayTicks 后在主线程(全局区域)执行一次. */
@@ -192,8 +192,7 @@ public final class FoliaCompat {
         if (!FOLIA) {
             return new TaskHandle(Bukkit.getScheduler().runTaskLater(plugin, runnable, delayTicks), null);
         }
-        invokeGlobal(plugin, runnable, GLOBAL_RUN_DELAYED, delayTicks, 0, false, false);
-        return new TaskHandle(null, null);
+        return new TaskHandle(null, invokeGlobal(plugin, runnable, GLOBAL_RUN_DELAYED, delayTicks, 0, false, false));
     }
 
     /**
@@ -211,6 +210,20 @@ public final class FoliaCompat {
     /**
      * 在全局区域主线程执行一次. 语义别名,专门用于世界管理等全局操作(createWorld/unloadWorldAsync 等).
      * Folia/Canvas 用 GlobalRegionScheduler.execute; Paper 用主线程 runTask.
+     *
+     * <p><b>两个平台的时序不同, 调用前务必确认:</b>
+     * <ul>
+     *   <li>Paper: 若已在主线程, {@code runnable} <b>立即同步执行</b>, 返回后副作用已生效。</li>
+     *   <li>Folia/Canvas: <b>总是入队</b>, 即使当前已在全局 tick 线程。返回后副作用<b>尚未</b>生效。</li>
+     * </ul>
+     *
+     * <p>因此<b>不要</b>在调用之后立刻读回被修改的值 —— 在 Folia 上会读到修改前的状态。
+     * 需要读回或需要顺序保证时, 把读取一并放进 {@code runnable} 内部。
+     *
+     * <p>这里刻意<b>不</b>加"已在全局 tick 线程就内联执行"的快捷路径: 本方法有 14 处调用点,
+     * 分布在 world create/delete/regen/unload 路径上, 内联执行会带来重入风险
+     * (参见历史提交 "fix: thread-aware Folia dispatch to avoid deadlock")。
+     * 只有 {@link WorldUnloadCompat} 在确实需要时自行用 {@link #isGlobalTickThread()} 判断。
      */
     public static TaskHandle runGlobal(Plugin plugin, Runnable runnable) {
         if (!FOLIA) {
@@ -306,8 +319,7 @@ public final class FoliaCompat {
         if (!FOLIA) {
             return new TaskHandle(Bukkit.getScheduler().runTaskAsynchronously(plugin, runnable), null);
         }
-        invokeAsync(plugin, runnable, ASYNC_RUN_NOW, 0, 0, false);
-        return new TaskHandle(null, null);
+        return new TaskHandle(null, invokeAsync(plugin, runnable, ASYNC_RUN_NOW, 0, 0, false));
     }
 
     /** 延迟 delayTicks(换算为 ms)后在异步线程执行一次. */
@@ -315,8 +327,7 @@ public final class FoliaCompat {
         if (!FOLIA) {
             return new TaskHandle(Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, runnable, delayTicks), null);
         }
-        invokeAsync(plugin, runnable, ASYNC_RUN_DELAYED, delayTicks, 0, false);
-        return new TaskHandle(null, null);
+        return new TaskHandle(null, invokeAsync(plugin, runnable, ASYNC_RUN_DELAYED, delayTicks, 0, false));
     }
 
     /** 异步定时重复, periodTicks 为周期. */
@@ -335,7 +346,9 @@ public final class FoliaCompat {
             try {
                 r.run();
             } catch (Throwable t) {
-                // 防止单次异常中断 Folia 的 Consumer
+                // 防止单次异常中断 Folia 的 Consumer. 走插件 logger 而不是 printStackTrace,
+                // 否则在服务器日志里没有插件归属, 排查时定位不到来源.
+                com.dumptruckman.minecraft.util.Logging.severe("Scheduled Multiverse task threw: %s", t);
                 t.printStackTrace();
             }
         };

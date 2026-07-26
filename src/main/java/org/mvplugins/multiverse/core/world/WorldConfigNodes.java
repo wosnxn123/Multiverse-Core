@@ -117,16 +117,18 @@ final class WorldConfigNodes {
             .defaultValue(true)
             .onLoadAndChange((oldValue, newValue) -> {
                 if (!(world instanceof LoadedMultiverseWorld loadedWorld)) return;
-                loadedWorld.getBukkitWorld().peek(world -> {
-                    com.folia.compat.FoliaCompat.runGlobal(org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core"), () -> {
-                        try {
-                            if (!world.isClearWeather() && !newValue) {
-                                world.setThundering(false);
-                                world.setStorm(false);
+                loadedWorld.getBukkitWorld().peek(world -> com.folia.compat.FoliaCompat.runGlobal(
+                        com.folia.compat.FoliaCompat.getPlugin(),
+                        () -> {
+                            try {
+                                if (!world.isClearWeather() && !newValue) {
+                                    world.setThundering(false);
+                                    world.setStorm(false);
+                                }
+                            } catch (Throwable t) {
+                                Logging.warning("Could not clear weather in world '%s': %s", world.getName(), t);
                             }
-                        } catch (Throwable ignored) {}
-                    });
-                });
+                        }));
             }));
 
     final ConfigNode<Boolean> anchorRespawn = node(ConfigNode.builder("anchor-respawn", Boolean.class)
@@ -150,8 +152,15 @@ final class WorldConfigNodes {
             .onLoadAndChange((oldValue, newValue) -> {
                 if (!(world instanceof LoadedMultiverseWorld loadedWorld)) return;
                 loadedWorld.getBukkitWorld().peek(bukkitWorld -> com.folia.compat.FoliaCompat.runGlobal(
-                        org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core"),
-                        () -> { try { bukkitWorld.setDifficulty(newValue); } catch (Throwable ignored) {} }));
+                        com.folia.compat.FoliaCompat.getPlugin(),
+                        () -> {
+                            try {
+                                bukkitWorld.setDifficulty(newValue);
+                            } catch (Throwable t) {
+                                Logging.warning("Could not set difficulty of world '%s' to %s: %s",
+                                        bukkitWorld.getName(), newValue, t);
+                            }
+                        }));
             }));
 
     final ConfigNode<Boolean> entryFeeEnabled = node(ConfigNode.builder("entry-fee.enabled", Boolean.class)
@@ -212,15 +221,23 @@ final class WorldConfigNodes {
             .defaultValue(true)
             .onLoadAndChange((sender, oldValue, newValue) -> {
                 if (!(world instanceof LoadedMultiverseWorld loadedWorld)) return;
-                loadedWorld.getBukkitWorld().peek(bukkitWorld -> {
-                    com.folia.compat.FoliaCompat.runGlobal(
-                            org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core"),
-                            () -> { try { bukkitWorld.setKeepSpawnInMemory(newValue); } catch (Throwable ignored) {} });
-                    if (bukkitWorld.getKeepSpawnInMemory() != newValue) {
-                        sender.sendMessage(ChatColor.RED + "Keep spawn in memory feature has been removed by " +
-                                "Minecraft in 1.21.9+ and will no longer have any effect when set to true.");
-                    }
-                });
+                // The read-back has to happen inside the scheduled task. On Folia runGlobal queues the
+                // setter, so checking here would read the world before the setter ran and warn on every
+                // change, whether or not the feature is actually unavailable.
+                loadedWorld.getBukkitWorld().peek(bukkitWorld -> com.folia.compat.FoliaCompat.runGlobal(
+                        com.folia.compat.FoliaCompat.getPlugin(),
+                        () -> {
+                            try {
+                                bukkitWorld.setKeepSpawnInMemory(newValue);
+                            } catch (Throwable t) {
+                                Logging.warning("Could not set keep-spawn-in-memory of world '%s' to %s: %s",
+                                        bukkitWorld.getName(), newValue, t);
+                            }
+                            if (bukkitWorld.getKeepSpawnInMemory() != newValue) {
+                                sender.sendMessage(ChatColor.RED + "Keep spawn in memory feature has been removed by "
+                                        + "Minecraft in 1.21.9+ and will no longer have any effect when set to true.");
+                            }
+                        }));
             }));
 
     final MapConfigNode<String, String> meta = (MapConfigNode<String, String>) node(MapConfigNode
@@ -239,8 +256,15 @@ final class WorldConfigNodes {
             .onLoadAndChange((oldValue, newValue) -> {
                 if (!(world instanceof LoadedMultiverseWorld loadedWorld)) return;
                 loadedWorld.getBukkitWorld().peek(bukkitWorld -> com.folia.compat.FoliaCompat.runGlobal(
-                        org.bukkit.Bukkit.getPluginManager().getPlugin("Multiverse-Core"),
-                        () -> { try { bukkitWorld.setPVP(newValue); } catch (Throwable ignored) {} }));
+                        com.folia.compat.FoliaCompat.getPlugin(),
+                        () -> {
+                            try {
+                                bukkitWorld.setPVP(newValue);
+                            } catch (Throwable t) {
+                                Logging.warning("Could not set pvp of world '%s' to %s: %s",
+                                        bukkitWorld.getName(), newValue, t);
+                            }
+                        }));
             }));
 
     final ConfigNode<String> respawnWorld = node(ConfigNode.builder("respawn-world", String.class)
