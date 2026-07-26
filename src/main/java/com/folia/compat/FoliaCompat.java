@@ -68,7 +68,16 @@ public final class FoliaCompat {
         Method enRun = null, enRunDel = null, enExec = null;
         Method bkIsGlobal = null, bkIsOwned = null;
         try {
-            Class.forName("io.papermc.paper.threadedregions.scheduler.RegionScheduler");
+            // Folia 检测必须用「只存在于服务端实现」的类.
+            //
+            // 不要用 io.papermc.paper.threadedregions.scheduler.* —— 那一整个包属于 **paper-api**,
+            // 普通 Paper 也自带(Paper 让插件能无条件编译 Folia 调度器代码), 用它检测会把
+            // 普通 Paper 误判成 Folia. 那会导致本类所有 Folia 分支在 Paper 上被错误启用,
+            // 其中 WorldUnloadCompat 会把 ENV 判成 FOLIA_UNSUPPORTED, 使世界卸载/删除/重生成
+            // 在 Paper 上直接失效.
+            //
+            // RegionizedServer 属于服务端, 只有 Folia 及其分支(Canvas 等)才有.
+            Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
             folia = true;
             Class<?> globalCls = Class.forName("io.papermc.paper.threadedregions.scheduler.GlobalRegionScheduler");
             Class<?> asyncCls = Class.forName("io.papermc.paper.threadedregions.scheduler.AsyncScheduler");
