@@ -17,8 +17,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '21'
-      - name: Pin Gradle to 8.10.2
-        run: sed -i 's|gradle-[0-9.]*-bin.zip|gradle-8.10.2-bin.zip|' gradle/wrapper/gradle-wrapper.properties
       - uses: actions/cache@v4
         with:
           path: |
