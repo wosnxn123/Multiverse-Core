@@ -254,7 +254,95 @@ public final class FoliaCompat {
         return new TaskHandle(null, null);
     }
 
+    // ============================ 世界变更调度 ============================
+
+    /**
+     * 执行一个「会创建/卸载世界」的操作。
+     *
+     * <p><b>为什么不能直接用 {@link #runGlobal}</b>: 在 Canvas 上, 世界卸载只有在该世界的所有
+     * region 停止 tick 之后才算完成 —— 而 region 是靠自己 tick 时读到 unload ticket 才把自己标记为
+     * 不可调度的 (Canvas {@code MinecraftServer#tickServer} 里读 {@code canvas$unloadTicket}),
+     * 且 region tick 与 global tick 共用同一个 {@code TickRegionScheduler} 线程池。
+     * Canvas 默认线程数是 {@code 核数/2}, 且 {@code <=4} 时取 <b>1</b>, 所以 8 核及以下只有一个
+     * tick 线程。若卸载流程本身跑在 global tick 线程上并阻塞等待卸载结果, 那个唯一的 tick 线程就
+     * 再也不会去 tick 那个 region, 卸载永远不会完成 —— <b>整个服务器永久冻结</b>。
+     *
+     * <p>所以: Folia/Canvas 上把整条流程放到异步线程 (在那里阻塞是合法的), 流程内部真正需要
+     * global 线程的单步 (如 {@code WorldCreator#createWorld}) 再用 {@link #callGlobal} 单独跳过去。
+     * Paper 上世界创建/卸载必须在主线程且是同步的, 所以仍走 {@link #runGlobal}。
+     */
+    public static TaskHandle runWorldMutation(Plugin plugin, Runnable runnable) {
+        if (!FOLIA) {
+            return runGlobal(plugin, runnable);
+        }
+        return runAsync(plugin, runnable);
+    }
+
+    /**
+     * 在全局 tick 线程上执行 {@code supplier} 并<b>等待</b>其结果。
+     *
+     * <p>已在全局 tick 线程上时直接内联执行。否则派发过去并阻塞当前线程等待。
+     *
+     * <p><b>调用方必须不是 tick 线程</b>(全局或 region 都不行): 在 tick 线程上阻塞会饿死
+     * {@code TickRegionScheduler} 线程池, 默认单线程配置下等于挂服。检测到这种调用会直接抛
+     * {@link IllegalStateException} —— 明确报错远好于静默冻结。
+     *
+     * @param timeoutMs 等待上限, 超时抛 {@link IllegalStateException} 而不是无限期挂住
+     */
+    public static <T> T callGlobal(Plugin plugin, java.util.function.Supplier<T> supplier, long timeoutMs) {
+        if (!FOLIA) {
+            return supplier.get();
+        }
+        if (isGlobalTickThread()) {
+            return supplier.get();
+        }
+        if (isAnyTickThread()) {
+            throw new IllegalStateException("callGlobal must not be called from a region tick thread: "
+                    + "blocking a tick thread can starve the tick scheduler and freeze the server. "
+                    + "Run the enclosing operation via runWorldMutation/runAsync first.");
+        }
+        final java.util.concurrent.CompletableFuture<T> future = new java.util.concurrent.CompletableFuture<>();
+        runGlobal(plugin, () -> {
+            try {
+                future.complete(supplier.get());
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        });
+        try {
+            return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException te) {
+            throw new IllegalStateException("Timed out after " + timeoutMs
+                    + "ms waiting for a task on the global tick thread", te);
+        } catch (java.util.concurrent.ExecutionException ee) {
+            Throwable cause = ee.getCause();
+            if (cause instanceof RuntimeException re) throw re;
+            if (cause instanceof Error err) throw err;
+            throw new RuntimeException(cause);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted waiting for a task on the global tick thread", ie);
+        }
+    }
+
     // ============================ 线程检测 ============================
+
+    /**
+     * 当前线程是否是<b>任何</b>一种 tick 线程(全局或 region)。
+     *
+     * <p>在 Folia/Canvas 上 {@code Bukkit.isPrimaryThread()} 的语义被重定义为「当前线程是不是
+     * 一个 tick 线程」, 正好是我们需要的判据 —— 用来拒绝在 tick 线程上做阻塞等待。
+     * Paper 上返回 false(Paper 没有这个危险, 主线程阻塞由调用方自己负责)。
+     */
+    public static boolean isAnyTickThread() {
+        if (!FOLIA) return false;
+        try {
+            return Bukkit.isPrimaryThread();
+        } catch (Throwable t) {
+            // 拿不准时按「是 tick 线程」处理: 宁可报错也不要冒冻结服务器的风险
+            return true;
+        }
+    }
 
     /**
      * 当前线程是否为全局 tick 线程 (Folia/Canvas).

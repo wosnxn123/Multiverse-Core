@@ -148,6 +148,12 @@ public final class WorldManager {
     }
 
     /**
+     * Folia/Canvas 下把 createWorld 派到 global tick 线程后的等待上限.
+     * 世界生成可能很慢(新世界要生成 spawn 区块), 给足余量; 超时会抛异常而不是无限期挂住调用线程.
+     */
+    private static final long WORLD_CREATE_TIMEOUT_MS = 120_000L;
+
+    /**
      * 获取本插件实例, 用于 Folia/Canvas 调度器注册.
      * WorldManager 未直接注入 Plugin, 通过 PluginManager 按 name 查找.
      */
@@ -988,10 +994,12 @@ public final class WorldManager {
     private Attempt<World, WorldCreatorFailureReason> createBukkitWorld(WorldCreator worldCreator) {
         return Try.of(() -> {
             this.loadTracker.add(worldCreator.name());
-            // Canvas/Folia: createWorld 必须在 global tick 线程.
-            // 调用方 (命令) 通过 FoliaCompat.runGlobal 异步路由到 global 线程, 不阻塞 region 线程.
-            // Paper: 主线程, 直接调用.
-            World world = worldCreator.createWorld();
+            // Canvas/Folia: createWorld 必须在 global tick 线程. 这里自己跳过去并等结果, 而不是
+            // 依赖调用方恰好已在 global 线程上 —— 因为世界卸载流程必须跑在异步线程 (见
+            // FoliaCompat.runWorldMutation 的说明), 而 regen 会在那条流程里再次创建世界.
+            // 已在 global 线程时 callGlobal 内联执行; Paper 上直接同步调用.
+            World world = com.folia.compat.FoliaCompat.callGlobal(
+                    getMVPlugin(), worldCreator::createWorld, WORLD_CREATE_TIMEOUT_MS);
             if (world == null) {
                 throw new MultiverseWorldException(Message.of(MVCorei18n.EXCEPTION_MULTIVERSEWORLD_CREATENULL));
             }
@@ -1023,6 +1031,16 @@ public final class WorldManager {
             // Canvas: 同步 unloadWorld 抛异常, 改用 WorldUnloadCompat (反射调 unloadWorldAsync, 路由到 global 线程).
             // Paper: 走原同步 Bukkit.unloadWorld. 上游 Folia: 抛 UnsupportedOperationException.
             // 阻塞等待异步结果, 保持本方法同步签名 (调用链是同步 Attempt/Try).
+            //
+            // 这个阻塞在 tick 线程上是致命的: Canvas 只有在该世界所有 region 停止 tick 后才完成卸载,
+            // 而 region 要靠自己 tick 才能读到 unload ticket 自我 deschedule, 且 region tick 与
+            // global tick 共用同一个线程池(默认 8 核及以下只有 1 个线程)。在 tick 线程上等 = 永久挂服。
+            // 正确入口是 FoliaCompat.runWorldMutation(Folia 下走异步线程)。这里显式拒绝而不是冻结。
+            if (com.folia.compat.FoliaCompat.isAnyTickThread()) {
+                throw new IllegalStateException("Refusing to unload world '" + world.getName()
+                        + "' from a tick thread: blocking here would freeze the server. "
+                        + "Dispatch via FoliaCompat.runWorldMutation instead.");
+            }
             boolean ok;
             try {
                 ok = com.folia.compat.WorldUnloadCompat

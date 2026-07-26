@@ -9,7 +9,6 @@ package org.mvplugins.multiverse.core.command.queue;
 
 import java.util.Map;
 import java.util.Objects;
-import java.util.WeakHashMap;
 
 import com.dumptruckman.minecraft.util.Logging;
 import io.vavr.control.Option;
@@ -52,7 +51,11 @@ public class CommandQueueManager {
     CommandQueueManager(@NotNull MultiverseCore plugin, @NotNull CoreConfig config) {
         this.plugin = plugin;
         this.config = config;
-        this.queuedCommandMap = new WeakHashMap<>();
+        // ConcurrentHashMap, 不是 WeakHashMap: 本 fork 把过期任务改成经 FoliaCompat 调度, 在
+        // Folia/Canvas 上过期回调跑在 global tick 线程, 而确认/执行跑在发起者的 region 线程 ——
+        // WeakHashMap 在并发访问下会损坏(连 get() 都会通过 expungeStaleEntries 改内部状态)。
+        // 弱键在这里本来也没意义: 键是 sender.getName() 产生的新 String, 且条目在执行/过期时已显式移除。
+        this.queuedCommandMap = new java.util.concurrent.ConcurrentHashMap<>();
     }
 
     /**

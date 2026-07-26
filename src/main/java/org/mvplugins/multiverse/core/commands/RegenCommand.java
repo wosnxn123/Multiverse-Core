@@ -122,7 +122,7 @@ class RegenCommand extends CoreCommand {
                 .keepWorldBorder(!parsedFlags.hasFlag(flags.resetWorldBorder))
                 .keepFiles(parsedFlags.flagValue(flags.keepFiles));
 
-        com.folia.compat.FoliaCompat.runGlobal(com.folia.compat.FoliaCompat.getPlugin(), () ->
+        com.folia.compat.FoliaCompat.runWorldMutation(com.folia.compat.FoliaCompat.getPlugin(), () ->
                 worldManager.regenWorld(regenWorldOptions).onSuccess(newWorld -> {
                     Logging.fine("World regen success: " + newWorld);
                     issuer.sendInfo(MVCorei18n.REGEN_SUCCESS, Replace.WORLD.with(newWorld.getName()));

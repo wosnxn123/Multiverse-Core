@@ -98,7 +98,7 @@ class DeleteCommand extends CoreCommand {
     }
 
     private void doWorldDeleting(MVCommandIssuer issuer, MultiverseWorld world) {
-        com.folia.compat.FoliaCompat.runGlobal(com.folia.compat.FoliaCompat.getPlugin(), () ->
+        com.folia.compat.FoliaCompat.runWorldMutation(com.folia.compat.FoliaCompat.getPlugin(), () ->
                 worldManager.deleteWorld(DeleteWorldOptions.world(world))
                         .onSuccess(deletedWorldName -> {
                             Logging.fine("World delete success: " + deletedWorldName);

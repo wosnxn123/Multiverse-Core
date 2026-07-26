@@ -79,7 +79,7 @@ class RemoveCommand extends CoreCommand {
     }
 
     private void doWorldRemoving(MVCommandIssuer issuer, MultiverseWorld world, ParsedCommandFlags parsedFlags) {
-        com.folia.compat.FoliaCompat.runGlobal(com.folia.compat.FoliaCompat.getPlugin(), () ->
+        com.folia.compat.FoliaCompat.runWorldMutation(com.folia.compat.FoliaCompat.getPlugin(), () ->
                 worldManager.removeWorld(RemoveWorldOptions.world(world)
                         .saveBukkitWorld(!parsedFlags.hasFlag(flags.noSave))
                         .unloadBukkitWorld(!parsedFlags.hasFlag(flags.noUnloadBukkitWorld)))

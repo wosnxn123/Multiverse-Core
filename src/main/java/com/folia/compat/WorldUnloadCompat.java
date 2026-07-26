@@ -125,7 +125,9 @@ public final class WorldUnloadCompat {
             try {
                 Consumer<Object> callback = r -> {
                     try {
-                        String name = String.valueOf(r);
+                        // r 是 io.canvasmc.canvas.WorldUnloadResult 枚举常量; 用 name() 而不是
+                        // toString(), 避免将来上游给枚举加 toString 覆写时静默失配.
+                        String name = (r instanceof Enum<?> e) ? e.name() : String.valueOf(r);
                         boolean success = "SUCCESS".equals(name);
                         if (!success) {
                             plugin.getLogger().warning("World unload of '" + world.getName()
