@@ -173,10 +173,14 @@ public final class WorldManager {
      */
     @ApiStatus.Internal
     public Try<Void> initAllWorlds() {
-        return updateWorldsFromConfig().andThenTry(() -> {
-            importExistingWorlds();
-            autoLoadWorlds();
-        }).flatMap(ignore -> saveWorldsConfig());
+        return updateWorldsFromConfig()
+                .andThenTry(this::importExistingWorlds)
+                .andThenTry(this::autoLoadWorlds)
+                .flatMap(ignore -> saveWorldsConfig())
+                .onFailure(ex -> {
+                    Logging.severe("Failed to load worlds from config: %s", ex.getMessage());
+                    ex.printStackTrace();
+                });
     }
 
     /**
@@ -1048,15 +1052,13 @@ public final class WorldManager {
             } catch (java.util.concurrent.ExecutionException ee) {
                 Throwable cause = ee.getCause();
                 if (cause instanceof Exception) throw (Exception) cause;
-                throw new RuntimeException(cause);
+                throw ee;
             }
             if (!ok) {
                 throwUnloadException(world);
             }
             Logging.fine("Bukkit unloaded world: " + world.getName());
-        }).andFinally(() -> {
-            if (world != null) unloadTracker.remove(world.getName());
-        });
+        }).andFinally(() -> unloadTracker.remove(world.getName()));
     }
 
     private void throwUnloadException(World world) throws MultiverseWorldException {
