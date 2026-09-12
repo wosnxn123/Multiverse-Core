@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 import java.util.logging.Level;
 
 /**
- * 世界卸载兼容工具: 同时支持 Paper/Spigot、Canvas(Folia 分支)与上游 Folia.
+ * 世界卸载兼容工具: 同时支持 Paper/Spigot、Canvas(Folia 分支)与上游 Folia(含 Mili 等直接基于 Folia 的分支).
  *
  * <p>核心问题:
  * <ul>
@@ -19,7 +19,9 @@ import java.util.logging.Level;
  *   <li>Canvas: 同步 {@code unloadWorld} 仍抛 {@link UnsupportedOperationException};
  *       但提供了异步 {@code unloadWorldAsync(World, boolean, Consumer<WorldUnloadResult>)},
  *       必须在 global tick 线程调用.</li>
- *   <li>上游 Folia: 同步与异步卸载均未实现(stub 抛异常),功能不可用,只能禁用并警告.</li>
+ *   <li>上游 Folia(含 Mili): {@code CraftServer#unloadWorld}/{@code createWorld} 均为
+ *       {@code if (true) throw new UnsupportedOperationException()} 的 stub(2026-08 Folia HEAD
+ *       与 Mili 26.2 df5b131 均如此),运行时世界创建/加载/卸载全部不可用,只能禁用并警告.</li>
  * </ul>
  *
  * <p>本工具通过反射访问 Canvas 专属类({@code io.canvasmc.canvas.WorldUnloadResult}),
@@ -70,7 +72,7 @@ public final class WorldUnloadCompat {
                     }
                     env = Env.CANVAS;
                 } else {
-                    // Folia 但无 Canvas API -> 上游 Folia,未实现
+                    // Folia 但无 Canvas API -> 上游 Folia/Mili: CraftServer stub 直接 throw,未实现
                     env = Env.FOLIA_UNSUPPORTED;
                 }
             } catch (Throwable t) {
@@ -114,10 +116,12 @@ public final class WorldUnloadCompat {
             }
         }
         if (ENV == Env.FOLIA_UNSUPPORTED) {
-            plugin.getLogger().severe("World unload is not supported on upstream Folia " +
-                    "(Canvas or patched Folia required). Cannot unload world: " + world.getName());
+            plugin.getLogger().severe("World unload is not supported on this Folia platform " +
+                    "(upstream Folia and forks like Mili do not implement runtime world unload; " +
+                    "only Canvas/Petiole provide Server#unloadWorldAsync). Cannot unload world: " + world.getName());
             return failedFuture(new UnsupportedOperationException(
-                    "World unload not implemented on this Folia build (use Canvas)."));
+                    "runtime world unload is not supported on this Folia platform (upstream Folia/Mili " +
+                    "do not implement it); worlds can only go away by stopping the server"));
         }
         // Canvas: 必须在 global tick 线程调 unloadWorldAsync
         CompletableFuture<Boolean> result = new CompletableFuture<>();
@@ -155,18 +159,20 @@ public final class WorldUnloadCompat {
     }
 
     /**
-     * 是否支持世界卸载(上游 Folia 不支持).
+     * 是否支持世界卸载(上游 Folia/Mili 不支持; Canvas 经 unloadWorldAsync 支持).
      */
     public static boolean isUnloadSupported() {
         return ENV != Env.FOLIA_UNSUPPORTED;
     }
 
     /**
-     * 是否支持世界创建.
+     * 是否支持世界创建/运行时加载.
      * <ul>
      *   <li>Paper: 同步 createWorld,支持.</li>
      *   <li>Canvas: createWorld 已实现(需 global/startup 线程),支持.</li>
-     *   <li>上游 Folia: createWorld 仍 stub 抛异常,不支持.</li>
+     *   <li>上游 Folia/Mili: {@code CraftServer#createWorld} 为无消息的
+     *       {@code UnsupportedOperationException} stub,不支持;世界只能由服务器启动时加载
+     *       (server.properties level-name / bukkit.yml worlds).</li>
      * </ul>
      */
     public static boolean isCreateWorldSupported() {

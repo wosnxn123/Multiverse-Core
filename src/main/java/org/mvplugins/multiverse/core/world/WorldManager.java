@@ -174,6 +174,12 @@ public final class WorldManager {
      */
     @ApiStatus.Internal
     public Try<Void> initAllWorlds() {
+        if (!com.folia.compat.WorldUnloadCompat.isCreateWorldSupported()) {
+            // 上游 Folia/Mili: 运行时世界创建/加载/卸载全部是 throw stub, 一次性说清平台限制.
+            Logging.warning("This Folia platform (upstream Folia/Mili) does not implement runtime world creation, loading or unloading.");
+            Logging.warning("Worlds can only be loaded by the server itself at boot (server.properties level-name / bukkit.yml worlds).");
+            Logging.warning("/mv create, /mv load, /mv unload and /mv remove/delete/regen of loaded worlds will fail with an explanatory error.");
+        }
         return updateWorldsFromConfig()
                 .andThenTry(this::importExistingWorlds)
                 .andThenTry(this::autoLoadWorlds)
@@ -1017,6 +1023,15 @@ public final class WorldManager {
      * @return The created world.
      */
     private Attempt<World, WorldCreatorFailureReason> createBukkitWorld(WorldCreator worldCreator) {
+        if (!com.folia.compat.WorldUnloadCompat.isCreateWorldSupported()) {
+            // 上游 Folia/Mili: CraftServer#createWorld 是 if(true) throw new UnsupportedOperationException()
+            // (无消息), 透传会让用户只看到 'null' 错误. 在这里拦截, 给出准确的平台级说明.
+            return Attempt.failure(WorldCreatorFailureReason.BUKKIT_CREATION_FAILED,
+                    Replace.WORLD.with(worldCreator.name()),
+                    Replace.ERROR.with("runtime world creation/loading is not supported on this Folia platform "
+                            + "(upstream Folia/Mili do not implement CraftServer#createWorld); pre-declare the "
+                            + "world in server.properties/bukkit.yml so the server loads it at boot"));
+        }
         return Try.of(() -> {
             this.loadTracker.add(worldCreator.name());
             // Canvas/Folia: createWorld 必须在 global tick 线程. 这里自己跳过去并等结果, 而不是
