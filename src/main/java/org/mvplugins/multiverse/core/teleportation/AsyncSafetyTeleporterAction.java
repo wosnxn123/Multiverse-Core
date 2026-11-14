@@ -5,7 +5,6 @@ import com.dumptruckman.minecraft.util.Logging;
 import io.papermc.lib.PaperLib;
 import io.vavr.control.Either;
 import io.vavr.control.Try;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
@@ -73,7 +72,7 @@ public final class AsyncSafetyTeleporterAction {
      *
      * @param passengerMode The passenger mode
      * @return The same {@link AsyncSafetyTeleporterAction} to be chained
-     * 
+     *
      * @since 5.1
      */
     @ApiStatus.AvailableSince("5.1")
@@ -192,14 +191,11 @@ public final class AsyncSafetyTeleporterAction {
         if (!this.checkSafety) {
             return Attempt.success(location);
         }
-        // Folia/Canvas: 方块读取必须在 location 所在的 region 线程.
-        // isOwnedByCurrentRegion 跨世界不可靠 (Canvas 上可能误报 true),
-        // runRegion + CountDownLatch 同 region 会死锁.
-        // 跳过安全检查: 目标通常是出生点 (世界创建时已验证) 或玩家位置 (本身安全).
+        // Folia/Canvas: block access belongs to the destination region. Preserve the fork's
+        // non-blocking path; waiting for a region task here can deadlock the calling tick thread.
         if (com.folia.compat.FoliaCompat.FOLIA) {
             return Attempt.success(location);
         }
-        // Paper: 主线程直接调用
         Location safeLocation = blockSafety.findSafeSpawnLocation(location);
         if (safeLocation == null) {
             return Attempt.failure(TeleportFailureReason.UNSAFE_LOCATION);
@@ -262,8 +258,7 @@ public final class AsyncSafetyTeleporterAction {
             @NotNull Entity teleportee,
             @NotNull Location location
     ) {
-        // Folia/Canvas: PaperLib.teleportAsync 在 Folia 下回退到同步传送, 会抛异常.
-        // 直接用 Entity.teleportAsync(Location), 它返回 CompletableFuture, 内部走 EntityScheduler.
+        // PaperLib falls back to synchronous teleport on Folia. Use the entity API instead.
         java.util.concurrent.CompletableFuture<Boolean> tpFuture;
         if (com.folia.compat.FoliaCompat.FOLIA) {
             tpFuture = teleportee.teleportAsync(location);
@@ -280,7 +275,8 @@ public final class AsyncSafetyTeleporterAction {
                 Logging.finer("Teleported async %s to %s", teleportee.getName(), location);
                 return Attempt.success(null);
             }
-            Logging.warning("Failed to async teleport %s to %s", teleportee.getName(), location);
+            Logging.warning("Failed to async teleport %s to %s. This is usually caused by another " +
+                    "plugin canceling the teleport event and not a bug with Multiverse.", teleportee.getName(), location);
             return Attempt.failure(TeleportFailureReason.TELEPORT_FAILED);
         });
     }
@@ -288,7 +284,6 @@ public final class AsyncSafetyTeleporterAction {
     private void applyPostTeleportVelocity(@NotNull Entity teleportee) {
         locationOrDestination.peek(destination ->
                 destination.getVelocity(teleportee).peek(velocity ->
-                        // 设速度是实体操作, 经 EntityScheduler; 玩家/实体退役时静默
                         com.folia.compat.FoliaCompat.runEntityLater(multiverseCore, teleportee,
                                 () -> teleportee.setVelocity(velocity), () -> {}, 1L)));
     }
